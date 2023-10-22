@@ -2,6 +2,7 @@ import json
 import os
 import re
 from collections import Counter
+from datetime import datetime
 from math import log
 
 import numpy as np
@@ -15,9 +16,7 @@ from .setting import category_dict
 
 class Preprocesser:
     def __init__(self):
-        self.JVM_PATH = (
-            "/Library/Java/JavaVirtualMachines/zulu-15.jdk/Contents/Home/bin/java"
-        )
+        self.JVM_PATH = "/Library/Java/JavaVirtualMachines/zulu-15.jdk/Contents/Home/bin/java"
         self.okt = Okt(jvmpath=self.JVM_PATH)
 
     def preprocess(self):
@@ -58,11 +57,7 @@ class Preprocesser:
             sentence_list = []
             for channel_name in channel_names:
                 try:
-                    keywords = ",".join(
-                        list(
-                            cat_data[cat_data["channelname"] == channel_name]["keyword"]
-                        )
-                    )
+                    keywords = ",".join(list(cat_data[cat_data["channelname"] == channel_name]["keyword"]))
 
                     keywords = set(keywords.split(","))
                     sentence = " ".join(keywords)
@@ -130,67 +125,111 @@ class Preprocesser:
     def create_matrix_csv(self):
         data = pd.read_csv("files/video_statistics_keyword.csv", index_col=0)
 
+        # Tdata split using temporal global split ( 기준 : 2023 / 6,7,8,9 영상 기준)
+
         for category in list(category_dict.keys()):
             file_path = f"./files/keyword_columns/{category}keyword_columns.csv"
             columns_df = pd.read_csv(file_path, index_col=0)
             columns = list(columns_df.index)
 
+            # 특정 카테고리 추출
             cat_data = data[data["category"] == category]
             channel_names = cat_data["channelname"].unique()
             channel_id = None
-            channel_dict = [[], [], []]
+            channel_dict_train = [[], [], []]
+            channel_dict_test = [[], [], []]
+
             for channel_name in tqdm(channel_names):
+                # 특정 채널 추출
                 chan_data = cat_data[cat_data["channelname"] == channel_name]
-                # print(chan_data)
                 channel_id = chan_data["channelid"].unique()[0]
-                # print(channel_id)
-                # return
-                chan_dict_views = {key: [] for key in columns}
-                chan_dict_likes = {key: [] for key in columns}
-                chan_dict_comments = {key: [] for key in columns}
+
+                # train data set
+                chan_dict_views_train = {key: [] for key in columns}
+                chan_dict_likes_train = {key: [] for key in columns}
+                chan_dict_comments_train = {key: [] for key in columns}
+
+                # test data set
+                chan_dict_views_test = {key: [] for key in columns}
+                chan_dict_likes_test = {key: [] for key in columns}
+                chan_dict_comments_test = {key: [] for key in columns}
+
+                split_date = datetime.strptime("2023-06-01", "%Y-%m-%d")
 
                 # 이제 그 행의 keyword 와 column을 매칭하여 있으면 점수 추가
                 for column in columns:
                     for index, row in chan_data.iterrows():
-                        # print(dict(row))
-                        # print(row[['keyword']])
                         if type(row["keyword"]) == float:
                             continue
+                        publishat = datetime.strptime(row["publishat"], "%Y-%m-%d")
                         if column in row["keyword"]:
-                            chan_dict_views[column].append(int(row["views"]))
-                            chan_dict_likes[column].append(int(row["likes"]))
-                            chan_dict_comments[column].append(int(row["comments"]))
+                            if split_date > publishat:
+                                chan_dict_views_train[column].append(int(row["views"]))
+                                chan_dict_likes_train[column].append(int(row["likes"]))
+                                chan_dict_comments_train[column].append(int(row["comments"]))
+                            else:
+                                chan_dict_views_test[column].append(int(row["views"]))
+                                chan_dict_likes_test[column].append(int(row["likes"]))
+                                chan_dict_comments_test[column].append(int(row["comments"]))
 
                 # get the average
-                chan_dict_views = self.avg_dict(chan_dict_views, channel_id)
-                chan_dict_likes = self.avg_dict(chan_dict_likes, channel_id)
-                chan_dict_comments = self.avg_dict(chan_dict_comments, channel_id)
+                chan_dict_views_train = self.avg_dict(chan_dict_views_train, channel_id)
+                chan_dict_likes_train = self.avg_dict(chan_dict_likes_train, channel_id)
+                chan_dict_comments_train = self.avg_dict(chan_dict_comments_train, channel_id)
 
-                channel_dict[0].append(chan_dict_views)
-                channel_dict[1].append(chan_dict_likes)
-                channel_dict[2].append(chan_dict_comments)
+                chan_dict_views_test = self.avg_dict(chan_dict_views_test, channel_id)
+                chan_dict_likes_test = self.avg_dict(chan_dict_likes_test, channel_id)
+                chan_dict_comments_test = self.avg_dict(chan_dict_comments_test, channel_id)
 
+                channel_dict_train[0].append(chan_dict_views_train)
+                channel_dict_train[1].append(chan_dict_likes_train)
+                channel_dict_train[2].append(chan_dict_comments_train)
+
+                channel_dict_test[0].append(chan_dict_views_test)
+                channel_dict_test[1].append(chan_dict_likes_test)
+                channel_dict_test[2].append(chan_dict_comments_test)
             # make matrix for category
             result = pd.DataFrame(
-                channel_dict[0],
+                channel_dict_train[0],
                 columns=columns.append("channelid"),
                 index=list(channel_names),
             )
-            result.to_csv(f"./files/matrix/{category}_views.csv")
+            result.to_csv(f"./files/train-test-matrix/{category}_views_train.csv")
 
             result = pd.DataFrame(
-                channel_dict[1],
+                channel_dict_train[1],
                 columns=columns.append("channelid"),
                 index=list(channel_names),
             )
-            result.to_csv(f"./files/matrix/{category}_likes.csv")
+            result.to_csv(f"./files/train-test-matrix/{category}_likes_train.csv")
 
             result = pd.DataFrame(
-                channel_dict[2],
+                channel_dict_train[2],
                 columns=columns.append("channelid"),
                 index=list(channel_names),
             )
-            result.to_csv(f"./files/matrix/{category}_comments.csv")
+            result.to_csv(f"./files/train-test-matrix/{category}_comments_train.csv")
+
+            result = pd.DataFrame(
+                channel_dict_test[0],
+                columns=columns.append("channelid"),
+                index=list(channel_names),
+            )
+            result.to_csv(f"./files/train-test-matrix/{category}_views_test.csv")
+
+            result = pd.DataFrame(
+                channel_dict_test[1],
+                columns=columns.append("channelid"),
+                index=list(channel_names),
+            )
+            result.to_csv(f"./files/train-test-matrix/{category}_likes_test.csv")
+
+            result = pd.DataFrame(
+                channel_dict_test[2],
+                columns=columns.append("channelid"),
+                index=list(channel_names),
+            )
+            result.to_csv(f"./files/train-test-matrix/{category}_comments_test.csv")
             # break
 
         return None

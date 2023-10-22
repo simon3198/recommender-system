@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import requests
 import scrapetube
+from tqdm import tqdm
 
 from .setting import api_key, category_dict
 
@@ -184,9 +185,7 @@ class Exporter:
                         video_id = video["contentDetails"]["videoId"]
 
                         video_detail_dict["video_id"] = video_id
-                        video_detail_dict["publish_at"] = video["snippet"][
-                            "publishedAt"
-                        ]
+                        video_detail_dict["publish_at"] = video["snippet"]["publishedAt"]
                         video_id_list.append(video_detail_dict)
 
             with open(
@@ -197,7 +196,7 @@ class Exporter:
                 json.dump(video_id_list, json_file, ensure_ascii=False)
 
     def get_video_information(self):
-        for category, value in list(category_dict.items()):
+        for category, value in tqdm(list(category_dict.items())):
             print(category)
             path = f"./files/video_id_scrape/{category}/"
 
@@ -214,7 +213,6 @@ class Exporter:
                 file_path = f"./files/video_id_scrape/{category}/{dirc}"
                 with open(file_path, "r") as file:
                     data = json.load(file)
-
                 vid_list = []
                 for video in data:
                     vid_list.append(video["vid"])
@@ -274,9 +272,7 @@ class Exporter:
                         video_dict["publish"] = video["publishedTimeText"]
                         video_list.append(video_dict)
                     count += 1
-                    with open(
-                        f"files/video_id_scrape/{k}/{key}.json", "w", encoding="UTF-8"
-                    ) as json_file:
+                    with open(f"files/video_id_scrape/{k}/{key}.json", "w", encoding="UTF-8") as json_file:
                         json.dump(video_list, json_file, ensure_ascii=False, indent=4)
                 except:
                     print(key, "fail")
@@ -331,9 +327,9 @@ class Exporter:
                     statistics = video["statistics"]
 
                     # 3년 지난 영상은 취급 x
-                    if datetime.fromisoformat(
-                        snippet["publishedAt"]
-                    ).date() < datetime.now().date() - timedelta(days=1080):
+                    if datetime.fromisoformat(snippet["publishedAt"]).date() < datetime.now().date() - timedelta(
+                        days=1080
+                    ):
                         break
                     try:
                         final_list.append(
@@ -342,9 +338,7 @@ class Exporter:
                                 snippet["channelId"],
                                 snippet["title"],
                                 category,
-                                datetime.fromisoformat(snippet["publishedAt"]).strftime(
-                                    "%Y-%m-%d"
-                                ),
+                                datetime.fromisoformat(snippet["publishedAt"]).strftime("%Y-%m-%d"),
                                 ",".join(snippet.get("tags", [" "])).replace("#", ""),
                                 int(statistics["viewCount"]),
                                 int(statistics["likeCount"]),
